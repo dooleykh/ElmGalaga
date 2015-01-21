@@ -1,3 +1,7 @@
+import Graphics.Collage (..)
+import Graphics.Element (..)
+import Window
+import Signal (..)
 {-
 
 For your final Elm project, I'm going to ask you to build a video game
@@ -67,3 +71,11 @@ You have to get approval from me to do this.  If you want approval,
 make up a point breakdown for your game and send it to me.
 
 -}
+
+-- Starfield gif can be obtained at http://30000fps.com/post/93334443098
+view : (Int, Int) -> Element
+view (w, h) =
+  layers [fittedImage w h "/starfield.gif"]
+
+main =
+  map view Window.dimensions
