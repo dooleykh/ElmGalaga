@@ -1,7 +1,13 @@
+import Color (..)
 import Graphics.Collage (..)
 import Graphics.Element (..)
-import Window
 import Signal (..)
+import Window
+import List
+import Debug
+import Keyboard
+import Transform2D
+import Time (..)
 {-
 
 For your final Elm project, I'm going to ask you to build a video game
@@ -73,9 +79,70 @@ make up a point breakdown for your game and send it to me.
 -}
 
 -- Starfield gif can be obtained at http://30000fps.com/post/93334443098
+isoceles : Float -> Float -> Shape
+isoceles w h =
+  let w2 = w/2.0
+      h2 = h/2.0
+  in polygon [(h2,0.0),(-h2,w2),(-h2,-w2)]
+
+drawFighter : Form
+drawFighter =
+  let triangle = filled red (ngon 3 10)
+  in group [moveX -5 triangle,moveX 5 triangle]
+
+drawDiver : Form
+drawDiver =
+  filled red (isoceles 15 25)
+
+drawDrifter : Form
+drawDrifter =
+  let triangle = filled red (ngon 3 10)
+  in group [moveY -5 triangle,moveY 5 triangle]
+
+drawHunter : Form
+drawHunter =
+  let triangle = filled red (ngon 3 10)
+      sideTriangle = filled red (isoceles 10 20)
+  in group [moveX -5 triangle,moveX 5 triangle, moveY -10 sideTriangle, moveY 10 sideTriangle]
+
+drawSpawner : Form
+drawSpawner =
+  let triangle = filled red (ngon 3 10)
+      shiftY = 5*sqrt(3)
+      shiftX = 5
+  in group [move (shiftX,shiftY) triangle, move (shiftX,-shiftY) triangle, move (20,0) triangle]
+
+drawSpinner : Form
+drawSpinner =
+  let triangle = filled red (ngon 3 7)
+      shiftValue = 7/2*(1+sqrt(3))
+  in group [moveX shiftValue triangle,
+            (rotate 3.14 (moveX -shiftValue triangle)),
+            (rotate 1.57 (moveY shiftValue triangle)),
+            (rotate -1.57 (moveY -shiftValue triangle))]
+
+drawHero : Form
+drawHero =
+  let triangle = filled lightBlue (ngon 3 10)
+      mainBody = filled lightBlue (isoceles 20 30)
+  in rotate 3.14 (group [move (-15,10) triangle
+                        ,move (-15,-10) triangle
+                        ,mainBody
+                        ])
+
+-- Code for Test Drawing a single ship onto the board at x,y coords
+viewShip : (Float,Float) -> (Int, Int)  -> Element
+viewShip (x,y) (w,h) =
+  let shipImage =
+    drawHero
+    |> rotate 3.14
+    |> move (x,y)
+  in
+    collage w h [shipImage]
+
 view : (Int, Int) -> Element
 view (w, h) =
-  layers [fittedImage w h "/starfield.gif"]
+  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat -w)/2.0+40),0) (w,h)]
 
 main =
   map view Window.dimensions
