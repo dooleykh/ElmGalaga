@@ -78,7 +78,6 @@ make up a point breakdown for your game and send it to me.
 
 -}
 
--- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 isoceles : Float -> Float -> Shape
 isoceles w h =
   let w2 = w/2.0
@@ -134,15 +133,25 @@ drawHero =
 viewShip : (Float,Float) -> (Int, Int)  -> Element
 viewShip (x,y) (w,h) =
   let shipImage =
+    drawHunter
+    |> rotate 3.14
+    |> move (x,y)
+  in
+    collage w h [shipImage]
+
+viewShipHero : (Float,Float) -> (Int, Int)  -> Element
+viewShipHero (x,y) (w,h) =
+  let shipImage =
     drawHero
     |> rotate 3.14
     |> move (x,y)
   in
     collage w h [shipImage]
 
+-- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 view : (Int, Int) -> Element
 view (w, h) =
-  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat -w)/2.0+40),0) (w,h)]
+  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat w)/2.0-40),0) (w,h), viewShipHero (((toFloat -w)/2.0+40),0) (w,h)]
 
 main =
   map view Window.dimensions
