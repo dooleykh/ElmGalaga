@@ -89,15 +89,15 @@ type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health
 type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
 type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
 
-type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup}
+type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup, dimensions: (Int, Int)}
 
-type alias Input = {arrows:Arrows, delta:Time, fire:Bool, power:Int}
+type alias Input = {arrows:Arrows, delta:Time, fire:Bool, keysDown: List Int, dimensions:(Int, Int)}
 type alias Arrows = {x:Float, y:Float}
 
 -- 'Constructors'
 hero: Float -> Float -> Hero
 hero xStart yStart =
-  {x=xStart, y=yStart, fireDelay=0, gunType=BombLauncher, health=10, speed=5.0}
+  {x=xStart, y=yStart, fireDelay=0, gunType=StandardGun, health=10, speed=5.0}
 
 enemy: Float -> Float -> EnemyType -> Enemy
 enemy xStart yStart enemyType =
@@ -127,7 +127,7 @@ gameState =
   let h = hero 0.0 0.0
       e = [enemy 50.0 50.0 Spinner]
   in
-    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = []}
+    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0)}
 
 --Update Functions
 updateGameState = foldp updateGame gameState input
@@ -135,13 +135,12 @@ updateGameState = foldp updateGame gameState input
 input : Signal Input
 input =
   let floatify {x,y} = { x = toFloat x, y = toFloat y }
-      --TODO Specific key click for powerup
-      pwerup keycodes = if (List.any (\key -> key == 13) keycodes) then 1 else 0
   in
       sampleOn delta <| Input <~ (map floatify Keyboard.arrows)
                               ~ delta
                               ~ Keyboard.space
-                              ~ (map pwerup Keyboard.keysDown)
+                              ~ Keyboard.keysDown
+                              ~ Window.dimensions
 delta =
   map inSeconds (fps 30)
 
@@ -152,7 +151,8 @@ updateGame input state =
     enemies <- updateEnemies state,
     heroBullets <- updateHeroBullets input state,
     enemyBullets <- updateEnemyBullets state,
-    powerups <- updatePowerups state
+    powerups <- updatePowerups state,
+    dimensions <- input.dimensions
   }
   in
     movedState
@@ -179,16 +179,38 @@ newBulletDelay gun =
 updateHero : Input -> GameState -> Hero
 updateHero inputs state =
   let localHero = state.hero
+      newWeapon = determineNewGun localHero.gunType inputs.keysDown
       newDelayCount = newDelay (newBulletDelay localHero.gunType) localHero.fireDelay inputs.fire
+      newX = localHero.x + inputs.arrows.x*localHero.speed
+      newY = localHero.y + inputs.arrows.y*localHero.speed
   in
-    {localHero |
-      x <- localHero.x + inputs.arrows.x*localHero.speed,
-      y <- localHero.y + inputs.arrows.y*localHero.speed,
-      fireDelay <- newDelayCount
-    }
+  if (heroInDemensions (newX, newY) state.dimensions) then
+    {localHero | x <- newX, y <- newY, fireDelay <- newDelayCount, gunType <- newWeapon}
+  else
+    {localHero | fireDelay <- newDelayCount, gunType <- newWeapon}
+
+determineNewGun : GunType -> List Int -> GunType
+determineNewGun currentGun keysDown =
+  let
+      maxNum = List.foldr (max) 0
+                               (List.filter (\code -> code >= 49 && code <= 53) keysDown)
+  in
+    case maxNum of
+      0  -> currentGun
+      49 -> StandardGun
+      50 -> BombLauncher
+      51 -> WShot
+      52 -> Beam
+      53 -> SpawnerLauncher
+
+heroInDemensions : (Float, Float) -> (Int, Int) -> Bool
+heroInDemensions (x, y) (windowX, windowY) =
+  let (floatX, floatY) = (toFloat windowX, toFloat windowY)
+  in
+    (x >= (-floatX / 2) + 17 && x <= (floatX / 2) - 17) && (y >= (-floatY / 2) + 17 && y <= (floatY / 2) - 17)
 
 updateEnemies : GameState -> List Enemy
-updateEnemies state=
+updateEnemies state =
   state.enemies
 
 updateHeroBullets : Input -> GameState -> List Bullet
@@ -197,8 +219,16 @@ updateHeroBullets inputs state =
                     if (not (delayed state.hero.fireDelay) && inputs.fire)
                       then state.heroBullets ++ (fireBullet state.hero.x state.hero.y state.hero.gunType)
                       else state.heroBullets
+      dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
   in
-    List.map moveBullet newBullets |> List.map tickUpdate
+    List.filter (\b -> bulletInDimensions b dimensions) (List.map moveBullet newBullets |> List.map tickUpdate) --TODO: function composition with filter seems weird
+
+bulletInDimensions : Bullet -> (Float, Float) -> Bool
+bulletInDimensions bullet (windowX, windowY) =
+  let x = bullet.x
+      y = bullet.y
+  in
+    (x >= (-windowX / 2) - 10  && x <= (windowX / 2) + 10) && (y >= (-windowY / 2) - 10 && y <= (windowY / 2) + 10)
 
 fireBullet : Float -> Float -> GunType -> List Bullet
 fireBullet x y gType =
@@ -312,11 +342,12 @@ drawBulletSpawner =
   filled green (circle 5)
 
 -- Code for Test Drawing a single ship onto the board at x,y coords
-viewGameState : (Int, Int) -> GameState -> Element
-viewGameState (w, h) state =
+viewGameState : GameState -> Element
+viewGameState state =
   let heroForm = viewHero state.hero
       enemyForms = List.map viewEnemy state.enemies
       bulletForms = List.map viewBullet state.heroBullets
+      (w, h) = state.dimensions
       merged = collage w h ([heroForm] ++ enemyForms ++ bulletForms)
   in
     layers [fittedImage w h "/starfield.gif", merged]
@@ -355,10 +386,5 @@ viewShip (x,y) (w,h) ship =
   in
     collage w h [shipImage]
 
--- Starfield gif can be obtained at http://30000fps.com/post/93334443098
-view : (Int, Int) -> Element
-view (w, h) =
-  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat w)/2.0-40),0) (w,h) drawHunter, viewShip (((toFloat -w)/2.0+40),0) (w,h) drawHero]
-
 main =
-  map2 viewGameState Window.dimensions updateGameState
+  map viewGameState updateGameState
