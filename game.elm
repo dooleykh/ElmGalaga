@@ -125,7 +125,7 @@ powerup xStart yStart pType =
 gameState : GameState
 gameState =
   let h = hero 0.0 0.0
-      e = [enemy 150.0 50.0 Hunter]
+      e = [enemy 150.0 50.0 Spinner]
   in
     {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0)}
 
@@ -225,7 +225,7 @@ newEnemyFireDelay eType =
     Drifter -> 3
     Hunter -> 10
     Spawner -> 20
-    Spinner -> 15
+    Spinner -> 40
 
 updateEnemyFireDelay : Enemy -> Enemy
 updateEnemyFireDelay enemy =
@@ -310,7 +310,18 @@ fireEnemyBullet enemy =
     Drifter -> [(bullet enemy.x enemy.y 3.14 StandardBullet)]
     Hunter  -> [(bullet enemy.x (enemy.y + 5) 3.14 StandardBullet), (bullet enemy.x (enemy.y - 5) 3.14 StandardBullet)]
     Spawner -> []
-    Spinner -> [(bullet enemy.x enemy.y 3.14 StandardBullet)]
+    Spinner -> [(bullet enemy.x enemy.y 3.14 StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0-1.0/6.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0+1.0/6.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0+1.0/3.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0-1.0/3.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0+2.0/3.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0-2.0/3.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0+5.0/6.0)) StandardBullet),
+                (bullet enemy.x enemy.y (3.14*(1.0-5.0/6.0)) StandardBullet),
+                (bullet enemy.x enemy.y (-3.14/2.0) StandardBullet),
+                (bullet enemy.x enemy.y (3.14/2.0) StandardBullet),
+                (bullet enemy.x enemy.y 0.0 StandardBullet)]
 
 updatePowerups : GameState -> List Powerup
 updatePowerups state =
