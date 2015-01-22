@@ -8,6 +8,7 @@ import Debug
 import Keyboard
 import Transform2D
 import Time (..)
+import Random
 {-
 
 For your final Elm project, I'm going to ask you to build a video game
@@ -78,6 +79,104 @@ make up a point breakdown for your game and send it to me.
 
 -}
 
+-- Type Definitions
+type EnemyType = Fighter | Diver | Drifter | Hunter | Spawner | Spinner
+type BulletType = StandardBullet | Bomb | SpawnerBullet
+type GunType = StandardGun | BombLauncher | WShot | SpawnerLauncher | Beam
+type PowerupType = GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health
+type alias Hero = {x:Float, y:Float, fireDelay:Int, gunType:GunType, health: Int}
+type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health: Int}
+type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
+type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
+
+type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup}
+
+type alias Input = {arrows:Arrows, delta:Time, fire:Bool, power:Int}
+type alias Arrows = {x:Float, y:Float}
+
+-- 'Constructors'
+hero: Float -> Float -> Hero
+hero xStart yStart =
+  {x=xStart, y=yStart, fireDelay=0, gunType=StandardGun, health=10}
+
+enemy: Float -> Float -> EnemyType -> Enemy
+enemy xStart yStart enemyType =
+  case enemyType of
+    Fighter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=5, health=1}
+    Diver -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=Random.maxInt, health=5}
+    Drifter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=3, health=2}
+    Hunter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=10, health=3}
+    Spawner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=30, health=10}
+    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=40, health=5}
+
+bullet: Float -> Float -> Float -> BulletType -> Bullet
+bullet xStart yStart angle bType =
+  let record = {x=xStart, y=yStart, angle=angle, bulletType=bType, tick=0}
+  in
+    case bType of
+      StandardBullet -> record
+      Bomb -> {record | tick <- 50}
+      SpawnerBullet -> {record | tick <- 30}
+
+powerup : Float -> Float -> PowerupType -> Powerup
+powerup xStart yStart pType =
+  {x=xStart, y=yStart, powerupType=pType}
+
+gameState : GameState
+gameState =
+  let h = hero 0.0 0.0
+      e = [enemy 50.0 50.0 Hunter]
+  in
+    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = []}
+
+--Update Functions
+updateGameState = foldp updateGame gameState input
+
+input : Signal Input
+input =
+  let floatify {x,y} = { x = toFloat x, y = toFloat y }
+      --TODO Specific key click for powerup
+      pwerup keycodes = if (List.any (\key -> key == 13) keycodes) then 1 else 0
+  in
+      sampleOn delta <| Input <~ (map floatify Keyboard.arrows)
+                              ~ delta
+                              ~ Keyboard.space
+                              ~ (map pwerup Keyboard.keysDown)
+delta =
+  map inSeconds (fps 30)
+
+updateGame : Input -> GameState -> GameState
+updateGame input state =
+  {state |
+    hero <- updateHero input state,
+    enemies <- updateEnemies state,
+    heroBullets <- updateHeroBullets input state,
+    enemyBullets <- updateEnemyBullets state,
+    powerups <- updatePowerups state
+  }
+
+updateHero : Input -> GameState -> Hero
+updateHero inputs state =
+  state.hero
+
+updateEnemies : GameState -> List Enemy
+updateEnemies state=
+  state.enemies
+
+updateHeroBullets : Input -> GameState -> List Bullet
+updateHeroBullets inputs state =
+  state.heroBullets
+
+updateEnemyBullets : GameState -> List Bullet
+updateEnemyBullets state =
+  state.enemyBullets
+
+updatePowerups : GameState -> List Powerup
+updatePowerups state =
+  state.powerups
+
+--View functions
+
 isoceles : Float -> Float -> Shape
 isoceles w h =
   let w2 = w/2.0
@@ -124,25 +223,40 @@ drawHero : Form
 drawHero =
   let triangle = filled lightBlue (ngon 3 10)
       mainBody = filled lightBlue (isoceles 20 30)
-  in rotate 3.14 (group [move (-15,10) triangle
-                        ,move (-15,-10) triangle
-                        ,mainBody
-                        ])
+  in group [move (-15,10) triangle,
+            move (-15,-10) triangle,
+            mainBody]
 
 -- Code for Test Drawing a single ship onto the board at x,y coords
-viewShip : (Float,Float) -> (Int, Int)  -> Element
-viewShip (x,y) (w,h) =
-  let shipImage =
-    drawHunter
-    |> rotate 3.14
-    |> move (x,y)
+viewGameState : (Int, Int) -> GameState -> Element
+viewGameState (w, h) state =
+  let heroForm = viewHero state.hero
+      enemyForms = List.map viewEnemy state.enemies
+      merged = collage w h ([heroForm] ++ enemyForms)
   in
-    collage w h [shipImage]
+    layers [fittedImage w h "/starfield.gif", merged]
 
-viewShipHero : (Float,Float) -> (Int, Int)  -> Element
-viewShipHero (x,y) (w,h) =
+
+
+viewHero : Hero -> Form
+viewHero hero =
+  drawHero |> move (hero.x, hero.y)
+
+viewEnemy : Enemy -> Form
+viewEnemy enemy =
+  let form = case enemy.enemyType of
+                Fighter -> drawFighter
+                Diver -> drawDiver
+                Drifter -> drawDrifter
+                Hunter -> drawHunter
+                Spawner -> drawSpawner
+                Spinner -> drawSpinner
+  in form |> rotate 3.14 |> move (enemy.x, enemy.y)
+
+viewShip : (Float,Float) -> (Int, Int) -> Form -> Element
+viewShip (x,y) (w,h) ship =
   let shipImage =
-    drawHero
+    ship
     |> rotate 3.14
     |> move (x,y)
   in
@@ -151,7 +265,7 @@ viewShipHero (x,y) (w,h) =
 -- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 view : (Int, Int) -> Element
 view (w, h) =
-  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat w)/2.0-40),0) (w,h), viewShipHero (((toFloat -w)/2.0+40),0) (w,h)]
+  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat w)/2.0-40),0) (w,h) drawHunter, viewShip (((toFloat -w)/2.0+40),0) (w,h) drawHero]
 
 main =
-  map view Window.dimensions
+  map2 viewGameState Window.dimensions updateGameState
