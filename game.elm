@@ -97,7 +97,7 @@ type alias Arrows = {x:Float, y:Float}
 -- 'Constructors'
 hero: Float -> Float -> Hero
 hero xStart yStart =
-  {x=xStart, y=yStart, fireDelay=0, gunType=StandardGun, health=10, speed=5.0}
+  {x=xStart, y=yStart, fireDelay=0, gunType=BombLauncher, health=10, speed=5.0}
 
 enemy: Float -> Float -> EnemyType -> Enemy
 enemy xStart yStart enemyType =
@@ -115,7 +115,7 @@ bullet xStart yStart angle bType =
   in
     case bType of
       StandardBullet -> record
-      Bomb -> {record | tick <- 50}
+      Bomb -> {record | tick <- 30}
       SpawnerBullet -> {record | tick <- 30}
 
 powerup : Float -> Float -> PowerupType -> Powerup
@@ -193,13 +193,34 @@ updateEnemies state=
 
 updateHeroBullets : Input -> GameState -> List Bullet
 updateHeroBullets inputs state =
-  if (not (delayed state.hero.fireDelay) && inputs.fire)
-    then state.heroBullets ++ [(bullet state.hero.x state.hero.y 0.0 StandardBullet)]
-    else state.heroBullets
+  let newBullets =
+                    if (not (delayed state.hero.fireDelay) && inputs.fire)
+                      then state.heroBullets ++ (fireBullet state.hero.x state.hero.y state.hero.gunType)
+                      else state.heroBullets
+  in
+    List.map moveBullet newBullets |> List.map tickUpdate
+
+fireBullet : Float -> Float -> GunType -> List Bullet
+fireBullet x y gType =
+  case gType of
+    StandardGun -> [(bullet x y 0.0 StandardBullet)]
+    BombLauncher -> [(bullet x y 0.0 Bomb)]
+    WShot -> [(bullet x y 0.0 StandardBullet), (bullet x y (3.14/6.0) StandardBullet), (bullet x y (-3.14/6.0) StandardBullet)]
+    Beam -> [(bullet x y 0.0 StandardBullet)]
+    SpawnerLauncher -> [(bullet x y 0.0 SpawnerBullet)]
+
+tickUpdate : Bullet -> Bullet
+tickUpdate bullet =
+  {bullet | tick <- bullet.tick - 1}
+
+moveBullet : Bullet -> Bullet
+moveBullet bullet =
+  {bullet | x <- bullet.x+(cos bullet.angle)* 10.0, y<- bullet.y+(sin bullet.angle)*10.0}
 
 updateEnemyBullets : GameState -> List Bullet
 updateEnemyBullets state =
   state.enemyBullets
+
 
 updatePowerups : GameState -> List Powerup
 updatePowerups state =
@@ -268,6 +289,24 @@ drawBulletBomb =
       largeCircle = filled red (circle 7)
   in group [largeCircle, mediumCircle, smallCircle]
 
+drawBoom : Form
+drawBoom =
+  let leBoom = drawBulletBomb
+      offset = 7.0/sqrt(2)
+  in group [ move (0.0,2.0*offset) leBoom,
+             move (2.0*offset,0.0) leBoom,
+             move (0.0,-2.0*offset) leBoom,
+             move (-2.0*offset,0.0) leBoom,
+             move (2.0*offset,2.0*offset) leBoom,
+             move (-2.0*offset,2.0*offset) leBoom,
+             move (2.0*offset,-2.0*offset) leBoom,
+             move (-2.0*offset,-2.0*offset) leBoom,
+             move (offset,offset) leBoom,
+             move (-offset,offset) leBoom,
+             move (offset,-offset) leBoom,
+             move (-offset,-offset) leBoom,
+             leBoom]
+
 drawBulletSpawner : Form
 drawBulletSpawner =
   filled green (circle 5)
@@ -303,7 +342,7 @@ viewBullet : Bullet -> Form
 viewBullet bullet =
   let form = case bullet.bulletType of
                 StandardBullet -> drawBulletStandard
-                Bomb -> drawBulletBomb
+                Bomb -> if (bullet.tick < 0) then drawBoom else drawBulletBomb
                 SpawnerBullet -> if (bullet.tick % 2 == 0) then drawBulletStandard else drawBulletSpawner
  in form |> move (bullet.x, bullet.y)
 
