@@ -305,12 +305,12 @@ updateEnemyBullets state =
 fireEnemyBullet : Enemy -> List Bullet
 fireEnemyBullet enemy =
   case enemy.enemyType of
-    Fighter -> [(bullet enemy.x enemy.y 0.0 StandardBullet)]
+    Fighter -> [(bullet enemy.x enemy.y 3.14 StandardBullet)]
     Diver   -> []
-    Drifter -> [(bullet enemy.x enemy.y 0.0 StandardBullet)]
-    Hunter  -> [(bullet enemy.x (enemy.y + 5) 0.0 StandardBullet), (bullet enemy.x (enemy.y - 5) 0.0 StandardBullet)]
+    Drifter -> [(bullet enemy.x enemy.y 3.14 StandardBullet)]
+    Hunter  -> [(bullet enemy.x (enemy.y + 5) 3.14 StandardBullet), (bullet enemy.x (enemy.y - 5) 3.14 StandardBullet)]
     Spawner -> []
-    Spinner -> [(bullet enemy.x enemy.y 0.0 StandardBullet)]
+    Spinner -> [(bullet enemy.x enemy.y 3.14 StandardBullet)]
 
 updatePowerups : GameState -> List Powerup
 updatePowerups state =
@@ -408,8 +408,9 @@ viewGameState state =
   let heroForm = viewHero state.hero
       enemyForms = List.map viewEnemy state.enemies
       bulletForms = List.map viewBullet state.heroBullets
+      enemyBulletForms = List.map viewBullet state.enemyBullets
       (w, h) = state.dimensions
-      merged = collage w h ([heroForm] ++ enemyForms ++ bulletForms)
+      merged = collage w h ([heroForm] ++ enemyForms ++ bulletForms ++ enemyBulletForms)
   in
     layers [fittedImage w h "/starfield.gif", merged]
 
