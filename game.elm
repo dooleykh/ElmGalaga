@@ -116,7 +116,7 @@ bullet xStart yStart angle bType =
     case bType of
       StandardBullet -> record
       Bomb -> {record | tick <- 30}
-      SpawnerBullet -> {record | tick <- 30}
+      SpawnerBullet -> {record | tick <- 20}
 
 powerup : Float -> Float -> PowerupType -> Powerup
 powerup xStart yStart pType =
@@ -243,8 +243,8 @@ updateEnemy state enemy =
                                        | otherwise -> {newEnemy | x <- enemy.x - 7})
                   | otherwise -> {newEnemy | x <- enemy.x - 3}
       Drifter -> {newEnemy | x <- enemy.x - 3, y <- enemy.y + 12 * sin(enemy.x * 1/30)}
-      Hunter -> if | state.hero.y - enemy.y <= -3 -> {newEnemy | y <- enemy.y - 3}
-                   | state.hero.y - enemy.y >= 3 -> {newEnemy | y <- enemy.y + 3}
+      Hunter -> if | enemy.y > state.hero.y -> {newEnemy | y <- enemy.y - 3}
+                   | enemy.y < state.hero.y -> {newEnemy | y <- enemy.y + 3}
                    | otherwise -> newEnemy
       Spawner -> newEnemy
       Spinner -> {newEnemy | x <- enemy.x - 1 + 12 * cos(enemy.angle), y <- enemy.y + 12 * sin(enemy.angle), angle <- enemy.angle + 0.1}
@@ -259,10 +259,24 @@ updateHeroBullets inputs state =
                     if (not (delayed state.hero.fireDelay) && inputs.fire)
                       then state.heroBullets ++ (fireBullet state.hero.x state.hero.y state.hero.gunType)
                       else state.heroBullets
+      nonSpawnerBullets = List.filter (\b -> not (b.bulletType == SpawnerBullet)) newBullets
+      spawnerBullets = List.filter (\b -> b.bulletType == SpawnerBullet) newBullets |> List.map spawnerBulletChildren |> List.concat
+      newTotalBullets = nonSpawnerBullets ++ spawnerBullets
       dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
   in
-    List.filter (bulletInDimensions dimensions)
-                <| (List.map moveBullet newBullets |> List.map tickUpdate)
+    List.filter expiredBomb <| List.filter (bulletInDimensions dimensions)
+                <| (List.map moveBullet newTotalBullets |> List.map tickUpdate)
+
+expiredBomb : Bullet -> Bool
+expiredBomb candidate =
+  (not (candidate.bulletType == Bomb)) || candidate.bulletType == Bomb && candidate.tick > -100
+
+spawnerBulletChildren : Bullet -> List Bullet
+spawnerBulletChildren spawner =
+  let angleDif = 3.14/6.0
+  in
+    if (spawner.tick <= 0) then [(bullet spawner.x spawner.y spawner.angle SpawnerBullet),(bullet spawner.x spawner.y (spawner.angle + angleDif) SpawnerBullet), (bullet spawner.x spawner.y (spawner.angle - angleDif) SpawnerBullet)]
+      else [spawner]
 
 bulletInDimensions : (Float, Float) -> Bullet -> Bool
 bulletInDimensions (windowX, windowY) bullet =
