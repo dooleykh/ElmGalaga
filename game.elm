@@ -84,7 +84,7 @@ type EnemyType = Fighter | Diver | Drifter | Hunter | Spawner | Spinner
 type BulletType = StandardBullet | Bomb | SpawnerBullet
 type GunType = StandardGun | BombLauncher | WShot | SpawnerLauncher | Beam
 type PowerupType = GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health
-type alias Hero = {x:Float, y:Float, fireDelay:Int, gunType:GunType, health: Int}
+type alias Hero = {x:Float, y:Float, fireDelay:Int, gunType:GunType, health: Int, speed: Float}
 type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health: Int}
 type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
 type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
@@ -97,7 +97,7 @@ type alias Arrows = {x:Float, y:Float}
 -- 'Constructors'
 hero: Float -> Float -> Hero
 hero xStart yStart =
-  {x=xStart, y=yStart, fireDelay=0, gunType=StandardGun, health=10}
+  {x=xStart, y=yStart, fireDelay=0, gunType=StandardGun, health=10, speed=5.0}
 
 enemy: Float -> Float -> EnemyType -> Enemy
 enemy xStart yStart enemyType =
@@ -125,7 +125,7 @@ powerup xStart yStart pType =
 gameState : GameState
 gameState =
   let h = hero 0.0 0.0
-      e = [enemy 50.0 50.0 Hunter]
+      e = [enemy 50.0 50.0 Spinner]
   in
     {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = []}
 
@@ -147,17 +147,45 @@ delta =
 
 updateGame : Input -> GameState -> GameState
 updateGame input state =
-  {state |
+  let movedState = {state |
     hero <- updateHero input state,
     enemies <- updateEnemies state,
     heroBullets <- updateHeroBullets input state,
     enemyBullets <- updateEnemyBullets state,
     powerups <- updatePowerups state
   }
+  in
+    movedState
+
+delayed : Int -> Bool
+delayed count =
+  count > 0
+
+newDelay : Int-> Int -> Bool -> Int
+newDelay newDelayValue currentCount triedToFire =
+  if | not triedToFire -> (currentCount - 1)
+     | not (delayed currentCount) -> newDelayValue
+     | otherwise -> (currentCount - 1)
+
+newBulletDelay : GunType -> Int
+newBulletDelay gun =
+  case gun of
+    StandardGun -> 10
+    BombLauncher -> 20
+    WShot -> 10
+    Beam -> 1
+    SpawnerLauncher -> 20
 
 updateHero : Input -> GameState -> Hero
 updateHero inputs state =
-  state.hero
+  let localHero = state.hero
+      newDelayCount = newDelay (newBulletDelay localHero.gunType) localHero.fireDelay inputs.fire
+  in
+    {localHero |
+      x <- localHero.x + inputs.arrows.x*localHero.speed,
+      y <- localHero.y + inputs.arrows.y*localHero.speed,
+      fireDelay <- newDelayCount
+    }
 
 updateEnemies : GameState -> List Enemy
 updateEnemies state=
@@ -165,7 +193,9 @@ updateEnemies state=
 
 updateHeroBullets : Input -> GameState -> List Bullet
 updateHeroBullets inputs state =
-  state.heroBullets
+  if (not (delayed state.hero.fireDelay) && inputs.fire)
+    then state.heroBullets ++ [(bullet state.hero.x state.hero.y 0.0 StandardBullet)]
+    else state.heroBullets
 
 updateEnemyBullets : GameState -> List Bullet
 updateEnemyBullets state =
@@ -227,12 +257,28 @@ drawHero =
             move (-15,-10) triangle,
             mainBody]
 
+drawBulletStandard : Form
+drawBulletStandard =
+  filled yellow (circle 5)
+
+drawBulletBomb : Form
+drawBulletBomb =
+  let smallCircle = filled red (circle 3)
+      mediumCircle = filled yellow (circle 5)
+      largeCircle = filled red (circle 7)
+  in group [largeCircle, mediumCircle, smallCircle]
+
+drawBulletSpawner : Form
+drawBulletSpawner =
+  filled green (circle 5)
+
 -- Code for Test Drawing a single ship onto the board at x,y coords
 viewGameState : (Int, Int) -> GameState -> Element
 viewGameState (w, h) state =
   let heroForm = viewHero state.hero
       enemyForms = List.map viewEnemy state.enemies
-      merged = collage w h ([heroForm] ++ enemyForms)
+      bulletForms = List.map viewBullet state.heroBullets
+      merged = collage w h ([heroForm] ++ enemyForms ++ bulletForms)
   in
     layers [fittedImage w h "/starfield.gif", merged]
 
@@ -252,6 +298,14 @@ viewEnemy enemy =
                 Spawner -> drawSpawner
                 Spinner -> drawSpinner
   in form |> rotate 3.14 |> move (enemy.x, enemy.y)
+
+viewBullet : Bullet -> Form
+viewBullet bullet =
+  let form = case bullet.bulletType of
+                StandardBullet -> drawBulletStandard
+                Bomb -> drawBulletBomb
+                SpawnerBullet -> if (bullet.tick % 2 == 0) then drawBulletStandard else drawBulletSpawner
+ in form |> move (bullet.x, bullet.y)
 
 viewShip : (Float,Float) -> (Int, Int) -> Form -> Element
 viewShip (x,y) (w,h) ship =
