@@ -215,7 +215,12 @@ tickUpdate bullet =
 
 moveBullet : Bullet -> Bullet
 moveBullet bullet =
-  {bullet | x <- bullet.x+(cos bullet.angle)* 10.0, y<- bullet.y+(sin bullet.angle)*10.0}
+  let newBullet = {bullet | x <- bullet.x+(cos bullet.angle)* 10.0, y<- bullet.y+(sin bullet.angle)*10.0}
+  in
+    if (bullet.bulletType == Bomb && bullet.tick < 0) then
+      bullet
+    else
+      newBullet
 
 updateEnemyBullets : GameState -> List Bullet
 updateEnemyBullets state =
@@ -312,6 +317,7 @@ drawBulletSpawner =
   filled green (circle 5)
 
 -- Code for Test Drawing a single ship onto the board at x,y coords
+-- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 viewGameState : (Int, Int) -> GameState -> Element
 viewGameState (w, h) state =
   let heroForm = viewHero state.hero
@@ -320,8 +326,6 @@ viewGameState (w, h) state =
       merged = collage w h ([heroForm] ++ enemyForms ++ bulletForms)
   in
     layers [fittedImage w h "/starfield.gif", merged]
-
-
 
 viewHero : Hero -> Form
 viewHero hero =
@@ -354,11 +358,5 @@ viewShip (x,y) (w,h) ship =
     |> move (x,y)
   in
     collage w h [shipImage]
-
--- Starfield gif can be obtained at http://30000fps.com/post/93334443098
-view : (Int, Int) -> Element
-view (w, h) =
-  layers [fittedImage w h "/starfield.gif", viewShip (((toFloat w)/2.0-40),0) (w,h) drawHunter, viewShip (((toFloat -w)/2.0+40),0) (w,h) drawHero]
-
 main =
   map2 viewGameState Window.dimensions updateGameState
