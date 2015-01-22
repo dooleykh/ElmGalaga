@@ -85,7 +85,7 @@ type BulletType = StandardBullet | Bomb | SpawnerBullet
 type GunType = StandardGun | BombLauncher | WShot | SpawnerLauncher | Beam
 type PowerupType = GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health
 type alias Hero = {x:Float, y:Float, fireDelay:Int, gunType:GunType, health: Int, speed: Float}
-type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health: Int}
+type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health: Int, xStart: Float, yStart: Float, angle: Float}
 type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
 type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
 
@@ -102,12 +102,12 @@ hero xStart yStart =
 enemy: Float -> Float -> EnemyType -> Enemy
 enemy xStart yStart enemyType =
   case enemyType of
-    Fighter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=5, health=1}
-    Diver -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=Random.maxInt, health=5}
-    Drifter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=3, health=2}
-    Hunter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=10, health=3}
-    Spawner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=30, health=10}
-    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=40, health=5}
+    Fighter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=5, health=1, xStart=xStart, yStart=yStart, angle=0}
+    Diver -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=Random.maxInt, health=5, xStart=xStart, yStart=yStart, angle=0}
+    Drifter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=3, health=2, xStart=xStart, yStart=yStart, angle=0}
+    Hunter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=10, health=3, xStart=xStart, yStart=yStart, angle=0}
+    Spawner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=30, health=10, xStart=xStart, yStart=yStart, angle=0}
+    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=40, health=5, xStart=xStart, yStart=yStart, angle=0}
 
 bullet: Float -> Float -> Float -> BulletType -> Bullet
 bullet xStart yStart angle bType =
@@ -125,7 +125,7 @@ powerup xStart yStart pType =
 gameState : GameState
 gameState =
   let h = hero 0.0 0.0
-      e = [enemy 50.0 50.0 Spinner]
+      e = [enemy 150.0 50.0 Spinner]
   in
     {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0)}
 
@@ -148,7 +148,7 @@ updateGame : Input -> GameState -> GameState
 updateGame input state =
   let movedState = {state |
     hero <- updateHero input state,
-    enemies <- updateEnemies state,
+    enemies <- updateEnemies input state,
     heroBullets <- updateHeroBullets input state,
     enemyBullets <- updateEnemyBullets state,
     powerups <- updatePowerups state,
@@ -209,9 +209,32 @@ heroInDemensions (x, y) (windowX, windowY) =
   in
     (x >= (-floatX / 2) + 17 && x <= (floatX / 2) - 17) && (y >= (-floatY / 2) + 17 && y <= (floatY / 2) - 17)
 
-updateEnemies : GameState -> List Enemy
-updateEnemies state =
-  state.enemies
+updateEnemies : Input -> GameState -> List Enemy
+updateEnemies input state =
+  let x = toFloat (fst input.dimensions)
+      y = toFloat (snd input.dimensions)
+  in
+    List.filter (enemyInDimensions (x, y))
+                <| List.map (updateEnemy state) state.enemies
+
+updateEnemy : GameState -> Enemy -> Enemy
+updateEnemy state enemy =
+  case enemy.enemyType of
+    Fighter -> {enemy | x <- enemy.x - 3}
+    Diver -> if | enemy.x < 0 -> (if | enemy.y > state.hero.y -> {enemy | y <- enemy.y - 5, x <- enemy.x - 7}
+                                     | enemy.y < state.hero.y -> {enemy | y <- enemy.y + 5, x <- enemy.x - 7}
+                                     | otherwise -> {enemy | x <- enemy.x - 7})
+                | otherwise -> {enemy | x <- enemy.x - 3}
+    Drifter -> {enemy | x <- enemy.x - 3, y <- enemy.y + 12 * sin(enemy.x * 1/30)}
+    Hunter -> if | enemy.y > state.hero.y -> {enemy | y <- enemy.y - 3}
+                 | enemy.y < state.hero.y -> {enemy | y <- enemy.y + 3}
+                 | otherwise -> enemy
+    Spawner -> enemy
+    Spinner -> {enemy | x <- enemy.x - 1 + 12 * cos(enemy.angle), y <- enemy.y + 12 * sin(enemy.angle), angle <- enemy.angle + 0.1}
+
+enemyInDimensions : (Float, Float) -> Enemy -> Bool
+enemyInDimensions (windowX, windowY) enemy =
+  enemy.x >= (-windowX / 2) - 10
 
 updateHeroBullets : Input -> GameState -> List Bullet
 updateHeroBullets inputs state =
@@ -221,10 +244,11 @@ updateHeroBullets inputs state =
                       else state.heroBullets
       dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
   in
-    List.filter (\b -> bulletInDimensions b dimensions) (List.map moveBullet newBullets |> List.map tickUpdate) --TODO: function composition with filter seems weird
+    List.filter (bulletInDimensions dimensions)
+                <| (List.map moveBullet newBullets |> List.map tickUpdate)
 
-bulletInDimensions : Bullet -> (Float, Float) -> Bool
-bulletInDimensions bullet (windowX, windowY) =
+bulletInDimensions : (Float, Float) -> Bullet -> Bool
+bulletInDimensions (windowX, windowY) bullet =
   let x = bullet.x
       y = bullet.y
   in
@@ -389,6 +413,6 @@ viewShip (x,y) (w,h) ship =
     |> move (x,y)
   in
     collage w h [shipImage]
-    
+
 main =
   map viewGameState updateGameState
