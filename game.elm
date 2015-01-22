@@ -89,7 +89,7 @@ type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health
 type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
 type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
 
-type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup, dimensions: (Int, Int)}
+type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup, dimensions: (Int, Int), seed: Random.Seed}
 
 type alias Input = {arrows:Arrows, delta:Time, fire:Bool, keysDown: List Int, dimensions:(Int, Int)}
 type alias Arrows = {x:Float, y:Float}
@@ -125,9 +125,9 @@ powerup xStart yStart pType =
 gameState : GameState
 gameState =
   let h = hero 0.0 0.0
-      e = [enemy 150.0 50.0 Spawner]
+      e = []
   in
-    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0)}
+    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0),seed=Random.initialSeed 1492}
 
 --Update Functions
 updateGameState = foldp updateGame gameState input
@@ -152,10 +152,16 @@ updateGame input state =
     heroBullets <- updateHeroBullets input state,
     enemyBullets <- updateEnemyBullets state,
     powerups <- updatePowerups state,
-    dimensions <- input.dimensions
+    dimensions <- input.dimensions,
+    seed <- nextSeed state.seed
   }
   in
     movedState
+
+nextSeed : Random.Seed -> Random.Seed
+nextSeed seed =
+  let (unused, seed') = Random.generate (Random.float 0 1) seed
+  in seed'
 
 delayed : Int -> Bool
 delayed count =
@@ -213,19 +219,39 @@ updateEnemies : Input -> GameState -> List Enemy
 updateEnemies input state =
   let x = toFloat (fst input.dimensions)
       y = toFloat (snd input.dimensions)
+      spawned = spawnEnemies state.seed state.dimensions
+      newEnemies = state.enemies ++ spawned
   in
     List.filter (enemyInDimensions (x, y))
-                <| List.map (updateEnemy state) state.enemies
+                <| List.map (updateEnemy state) newEnemies
+
+spawnEnemies : Random.Seed -> (Int, Int) -> List Enemy
+spawnEnemies seed (windowX, windowY) =
+  let maxX = (toFloat windowX)/2.0
+      minX = maxX - 20.0
+      maxY = (toFloat windowY)/2.0
+      minY = -maxY
+      (addValue, seed') = Random.generate (Random.float 0 1) seed
+      (xStart, seed'') = Random.generate (Random.float minX maxX) seed'
+      (yStart, seed_ignored) = Random.generate (Random.float minY maxY) seed''
+  in
+    if | addValue < 0.99 -> []
+       | addValue < 0.992 -> [(enemy xStart yStart Fighter)]
+       | addValue < 0.995 -> [(enemy xStart yStart Diver)]
+       | addValue < 0.997 -> [(enemy xStart yStart Drifter)]
+       | addValue < 0.998 -> [(enemy xStart yStart Hunter)]
+       | addValue < 0.999 -> [(enemy xStart yStart Spinner)]
+       | otherwise -> [(enemy xStart yStart Spawner)]
 
 newEnemyFireDelay : EnemyType -> Int
 newEnemyFireDelay eType =
   case eType of
-    Fighter -> 5
+    Fighter -> 15
     Diver -> Random.maxInt
-    Drifter -> 3
-    Hunter -> 10
-    Spawner -> 80
-    Spinner -> 40
+    Drifter -> 13
+    Hunter -> 20
+    Spawner -> 90
+    Spinner -> 50
 
 updateEnemyFireDelay : Enemy -> Enemy
 updateEnemyFireDelay enemy =
