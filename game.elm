@@ -243,8 +243,8 @@ updateEnemy state enemy =
                                        | otherwise -> {newEnemy | x <- enemy.x - 7})
                   | otherwise -> {newEnemy | x <- enemy.x - 3}
       Drifter -> {newEnemy | x <- enemy.x - 3, y <- enemy.y + 12 * sin(enemy.x * 1/30)}
-      Hunter -> if | enemy.y > state.hero.y -> {newEnemy | y <- enemy.y - 3}
-                   | enemy.y < state.hero.y -> {newEnemy | y <- enemy.y + 3}
+      Hunter -> if | state.hero.y - enemy.y <= -3 -> {newEnemy | y <- enemy.y - 3}
+                   | state.hero.y - enemy.y >= 3 -> {newEnemy | y <- enemy.y + 3}
                    | otherwise -> newEnemy
       Spawner -> newEnemy
       Spinner -> {newEnemy | x <- enemy.x - 1 + 12 * cos(enemy.angle), y <- enemy.y + 12 * sin(enemy.angle), angle <- enemy.angle + 0.1}
