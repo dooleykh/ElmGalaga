@@ -125,7 +125,7 @@ powerup xStart yStart pType =
 gameState : GameState
 gameState =
   let h = hero 0.0 0.0
-      e = [enemy 150.0 50.0 Spinner]
+      e = [enemy 150.0 50.0 Hunter]
   in
     {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0)}
 
@@ -295,8 +295,22 @@ moveBullet bullet =
 
 updateEnemyBullets : GameState -> List Bullet
 updateEnemyBullets state =
-  state.enemyBullets
+  let enemiesShooting = List.filter (\e -> e.fireDelay <= 0) state.enemies
+      newBullets = List.concat (List.map fireEnemyBullet enemiesShooting)
+      mergedBullets = state.enemyBullets ++ newBullets
+      dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
+  in List.filter (bulletInDimensions dimensions)
+              <| (List.map moveBullet mergedBullets |> List.map tickUpdate)
 
+fireEnemyBullet : Enemy -> List Bullet
+fireEnemyBullet enemy =
+  case enemy.enemyType of
+    Fighter -> [(bullet enemy.x enemy.y 0.0 StandardBullet)]
+    Diver   -> []
+    Drifter -> [(bullet enemy.x enemy.y 0.0 StandardBullet)]
+    Hunter  -> [(bullet enemy.x (enemy.y + 5) 0.0 StandardBullet), (bullet enemy.x (enemy.y - 5) 0.0 StandardBullet)]
+    Spawner -> []
+    Spinner -> [(bullet enemy.x enemy.y 0.0 StandardBullet)]
 
 updatePowerups : GameState -> List Powerup
 updatePowerups state =
