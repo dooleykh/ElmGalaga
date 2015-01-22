@@ -125,7 +125,7 @@ powerup xStart yStart pType =
 gameState : GameState
 gameState =
   let h = hero 0.0 0.0
-      e = [enemy 150.0 50.0 Spinner]
+      e = [enemy 150.0 50.0 Spawner]
   in
     {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0)}
 
@@ -224,7 +224,7 @@ newEnemyFireDelay eType =
     Diver -> Random.maxInt
     Drifter -> 3
     Hunter -> 10
-    Spawner -> 20
+    Spawner -> 80
     Spinner -> 40
 
 updateEnemyFireDelay : Enemy -> Enemy
@@ -312,9 +312,12 @@ updateEnemyBullets state =
   let enemiesShooting = List.filter (\e -> e.fireDelay <= 0) state.enemies
       newBullets = List.concat (List.map fireEnemyBullet enemiesShooting)
       mergedBullets = state.enemyBullets ++ newBullets
+      nonSpawnerBullets = List.filter (\b -> not (b.bulletType == SpawnerBullet)) mergedBullets
+      spawnerBullets = List.filter (\b -> b.bulletType == SpawnerBullet) mergedBullets |> List.map spawnerBulletChildren |> List.concat
+      newTotalBullets = nonSpawnerBullets ++ spawnerBullets
       dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
   in List.filter (bulletInDimensions dimensions)
-              <| (List.map moveBullet mergedBullets |> List.map tickUpdate)
+              <| (List.map moveBullet newTotalBullets |> List.map tickUpdate)
 
 fireEnemyBullet : Enemy -> List Bullet
 fireEnemyBullet enemy =
@@ -323,7 +326,7 @@ fireEnemyBullet enemy =
     Diver   -> []
     Drifter -> [(bullet enemy.x enemy.y 3.14 StandardBullet)]
     Hunter  -> [(bullet enemy.x (enemy.y + 5) 3.14 StandardBullet), (bullet enemy.x (enemy.y - 5) 3.14 StandardBullet)]
-    Spawner -> []
+    Spawner -> [(bullet enemy.x enemy.y 3.14 SpawnerBullet)]
     Spinner -> [(bullet enemy.x enemy.y 3.14 StandardBullet),
                 (bullet enemy.x enemy.y (3.14*(1.0-1.0/6.0)) StandardBullet),
                 (bullet enemy.x enemy.y (3.14*(1.0+1.0/6.0)) StandardBullet),
