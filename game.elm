@@ -106,8 +106,8 @@ enemy xStart yStart enemyType =
     Diver -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=Random.maxInt, health=5, xStart=xStart, yStart=yStart, angle=0}
     Drifter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=3, health=2, xStart=xStart, yStart=yStart, angle=0}
     Hunter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=10, health=3, xStart=xStart, yStart=yStart, angle=0}
-    Spawner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=30, health=10, xStart=xStart, yStart=yStart, angle=0}
-    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=40, health=5, xStart=xStart, yStart=yStart, angle=0}
+    Spawner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=20, health=10, xStart=xStart, yStart=yStart, angle=0}
+    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=15, health=5, xStart=xStart, yStart=yStart, angle=0}
 
 bullet: Float -> Float -> Float -> BulletType -> Bullet
 bullet xStart yStart angle bType =
@@ -217,20 +217,37 @@ updateEnemies input state =
     List.filter (enemyInDimensions (x, y))
                 <| List.map (updateEnemy state) state.enemies
 
+newEnemyFireDelay : EnemyType -> Int
+newEnemyFireDelay eType =
+  case eType of
+    Fighter -> 5
+    Diver -> Random.maxInt
+    Drifter -> 3
+    Hunter -> 10
+    Spawner -> 20
+    Spinner -> 15
+
+updateEnemyFireDelay : Enemy -> Enemy
+updateEnemyFireDelay enemy =
+  if (not (delayed enemy.fireDelay)) then {enemy | fireDelay <- newEnemyFireDelay enemy.enemyType}
+    else {enemy | fireDelay <- enemy.fireDelay - 1}
+
 updateEnemy : GameState -> Enemy -> Enemy
 updateEnemy state enemy =
-  case enemy.enemyType of
-    Fighter -> {enemy | x <- enemy.x - 3}
-    Diver -> if | enemy.x < 0 -> (if | enemy.y > state.hero.y -> {enemy | y <- enemy.y - 5, x <- enemy.x - 7}
-                                     | enemy.y < state.hero.y -> {enemy | y <- enemy.y + 5, x <- enemy.x - 7}
-                                     | otherwise -> {enemy | x <- enemy.x - 7})
-                | otherwise -> {enemy | x <- enemy.x - 3}
-    Drifter -> {enemy | x <- enemy.x - 3, y <- enemy.y + 12 * sin(enemy.x * 1/30)}
-    Hunter -> if | enemy.y > state.hero.y -> {enemy | y <- enemy.y - 3}
-                 | enemy.y < state.hero.y -> {enemy | y <- enemy.y + 3}
-                 | otherwise -> enemy
-    Spawner -> enemy
-    Spinner -> {enemy | x <- enemy.x - 1 + 12 * cos(enemy.angle), y <- enemy.y + 12 * sin(enemy.angle), angle <- enemy.angle + 0.1}
+  let newEnemy = updateEnemyFireDelay enemy
+  in
+    case enemy.enemyType of
+      Fighter -> {newEnemy | x <- enemy.x - 3}
+      Diver -> if | enemy.x < 0 -> (if | enemy.y > state.hero.y -> {newEnemy | y <- enemy.y - 5, x <- enemy.x - 7}
+                                       | enemy.y < state.hero.y -> {newEnemy | y <- enemy.y + 5, x <- enemy.x - 7}
+                                       | otherwise -> {newEnemy | x <- enemy.x - 7})
+                  | otherwise -> {newEnemy | x <- enemy.x - 3}
+      Drifter -> {newEnemy | x <- enemy.x - 3, y <- enemy.y + 12 * sin(enemy.x * 1/30)}
+      Hunter -> if | enemy.y > state.hero.y -> {newEnemy | y <- enemy.y - 3}
+                   | enemy.y < state.hero.y -> {newEnemy | y <- enemy.y + 3}
+                   | otherwise -> newEnemy
+      Spawner -> newEnemy
+      Spinner -> {newEnemy | x <- enemy.x - 1 + 12 * cos(enemy.angle), y <- enemy.y + 12 * sin(enemy.angle), angle <- enemy.angle + 0.1}
 
 enemyInDimensions : (Float, Float) -> Enemy -> Bool
 enemyInDimensions (windowX, windowY) enemy =
