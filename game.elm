@@ -9,6 +9,7 @@ import Keyboard
 import Transform2D
 import Time (..)
 import Random
+import Text
 {-
 
 For your final Elm project, I'm going to ask you to build a video game
@@ -151,7 +152,10 @@ delta =
 
 updateGame : Input -> GameState -> GameState
 updateGame input state =
-  if (state.gameOver) then state
+  if (state.gameOver) then
+    if (List.any (\k -> k == 13) input.keysDown) then
+      gameState
+      else state
   else
   let movedState = {state |
         hero <- updateHero input state |> powerupHero state.powerups,
@@ -390,31 +394,15 @@ updateHeroBullets inputs state =
                       else state.heroBullets
       nonSpawnerBullets = List.filter (\b -> not (b.bulletType == SpawnerBullet)) newBullets
       spawnerBullets = List.filter (\b -> b.bulletType == SpawnerBullet) newBullets |> List.map spawnerBulletChildren |> List.concat
-      newBombBullets = List.filter (\b -> b.bulletType == Bomb && b.tick == 0) newBullets |> List.map spawnBombChildren |> List.concat
-      newTotalBullets = nonSpawnerBullets ++ spawnerBullets ++ newBombBullets
+      newTotalBullets = nonSpawnerBullets ++ spawnerBullets
       dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
   in
     List.filter expiredBomb <| List.filter (bulletInDimensions dimensions)
                 <| (List.map moveBullet newTotalBullets |> List.map tickUpdate)
 
-spawnBombChildren : Bullet -> List Bullet
-spawnBombChildren bomb =
-  [(bullet bomb.x bomb.y 3.14 StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0-1.0/6.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0+1.0/6.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0+1.0/3.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0-1.0/3.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0+2.0/3.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0-2.0/3.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0+5.0/6.0)) StandardBullet),
-              (bullet bomb.x bomb.y (3.14*(1.0-5.0/6.0)) StandardBullet),
-              (bullet bomb.x bomb.y (-3.14/2.0) StandardBullet),
-              (bullet bomb.x bomb.y (3.14/2.0) StandardBullet),
-              (bullet bomb.x bomb.y 0.0 StandardBullet)]
-
 expiredBomb : Bullet -> Bool
 expiredBomb candidate =
-  (not (candidate.bulletType == Bomb)) || candidate.bulletType == Bomb && candidate.tick > -50
+  (not (candidate.bulletType == Bomb)) || candidate.bulletType == Bomb && candidate.tick > -100
 
 spawnerBulletChildren : Bullet -> List Bullet
 spawnerBulletChildren spawner =
@@ -624,18 +612,31 @@ drawPowerupSpeed =
 -- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 viewGameState : GameState -> Element
 viewGameState state =
-  if state.gameOver == True then layers[fittedImage (fst state.dimensions) (snd state.dimensions) "/starfield.gif"]
-  else
-    let (w, h) = state.dimensions
-        healthForm = viewHealth (toFloat h) (toFloat state.hero.health)
-        heroForm = viewHero state.hero
-        enemyForms = List.map viewEnemy state.enemies
-        bulletForms = List.map viewBullet state.heroBullets
-        enemyBulletForms = List.map viewBullet state.enemyBullets
-        powerupForms = List.map viewPowerup state.powerups
-        merged = collage w h (bulletForms ++ enemyBulletForms ++ powerupForms ++[heroForm] ++ enemyForms ++ [healthForm])
-    in
-      layers [fittedImage w h "/starfield.gif", merged]
+  let (w, h) = state.dimensions
+  in
+    if state.gameOver == True then
+      layers[(fittedImage w h "/starfield.gif"), collage w h [viewEndScreen]]
+    else
+      let healthForm = viewHealth (toFloat h) (toFloat state.hero.health)
+          heroForm = viewHero state.hero
+          enemyForms = List.map viewEnemy state.enemies
+          bulletForms = List.map viewBullet state.heroBullets
+          enemyBulletForms = List.map viewBullet state.enemyBullets
+          powerupForms = List.map viewPowerup state.powerups
+          merged = collage w h (bulletForms ++ enemyBulletForms ++ powerupForms ++[heroForm] ++ enemyForms ++ [healthForm])
+      in
+        layers [fittedImage w h "/starfield.gif", merged]
+
+viewEndScreen : Form
+viewEndScreen =
+  Text.fromString "Game Over\nPress Enter to play again"
+                  |> Text.color white
+                  |> Text.height 40.0
+                  |> Text.centered
+                  |> toForm
+                  |> move (0.0, 0.0)
+
+
 
 viewHealth : Float -> Float -> Form
 viewHealth h health =
