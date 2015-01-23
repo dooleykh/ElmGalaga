@@ -83,7 +83,7 @@ make up a point breakdown for your game and send it to me.
 type EnemyType = Fighter | Diver | Drifter | Hunter | Spawner | Spinner
 type BulletType = StandardBullet | Bomb | SpawnerBullet
 type GunType = StandardGun | BombLauncher | WShot | SpawnerLauncher | Beam
-type PowerupType = GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health
+type PowerupType = GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health | Speed
 type alias Hero = {x:Float, y:Float, fireDelay:Int, gunType:GunType, health: Int, speed: Float}
 type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health: Int, xStart: Float, yStart: Float, angle: Float}
 type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
@@ -126,8 +126,9 @@ gameState : GameState
 gameState =
   let h = hero 0.0 0.0
       e = []
+      p = [powerup 20.0 20.0 Speed]
   in
-    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0),seed=Random.initialSeed 165411,gameOver=False}
+    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = p,dimensions=(0,0),seed=Random.initialSeed 165411,gameOver=False}
 
 --Update Functions
 updateGameState = foldp updateGame gameState input
@@ -149,7 +150,7 @@ updateGame input state =
   if (state.gameOver) then state
   else
   let movedState = {state |
-        hero <- updateHero input state,
+        hero <- updateHero input state |> powerupHero state.powerups,
         enemies <- updateEnemies input state,
         heroBullets <- updateHeroBullets input state,
         enemyBullets <- updateEnemyBullets state,
@@ -161,7 +162,8 @@ updateGame input state =
         hero <- (collideHeroWithEnemies movedState.enemies movedState.hero) |> collideHeroWithBullets movedState.enemyBullets,
         enemies <- (collideEnemiesWithHero movedState.hero movedState.enemies) |> collideEnemiesWithBullets movedState.heroBullets,
         heroBullets <- heroRemainingBullets movedState.enemies movedState.heroBullets,
-        enemyBullets <- enemyRemaingBullets movedState.hero movedState.enemyBullets
+        enemyBullets <- enemyRemaingBullets movedState.hero movedState.enemyBullets,
+        powerups <- collideHeroWithPowerups movedState.hero movedState.powerups
       }
       removedState = if (collidedState.hero.health <= 0) then {collidedState | gameOver <- True} else collidedState
   in
@@ -175,7 +177,11 @@ manhattan (x, y) (x2, y2) =
 
 colliding : (Float,Float) -> (Float,Float) -> Bool
 colliding (x1,y1) (x2,y2) =
-  (manhattan (x1,y1) (x2,y2)) < 10 --TODO parameter
+  (manhattan (x1,y1) (x2,y2)) < 20 --TODO parameter
+
+collideHeroWithPowerups : Hero -> List Powerup -> List Powerup
+collideHeroWithPowerups hero powerups =
+  List.filter (\p -> not (colliding (hero.x, hero.y) (p.x, p.y))) powerups
 
 collideHeroWithEnemies : List Enemy -> Hero -> Hero
 collideHeroWithEnemies enemies hero =
@@ -255,6 +261,28 @@ updateHero inputs state =
     {localHero | x <- newX, y <- newY, fireDelay <- newDelayCount, gunType <- newWeapon}
   else
     {localHero | fireDelay <- newDelayCount, gunType <- newWeapon}
+
+getLastElement : List a -> a
+getLastElement l =
+  List.drop ((List.length l) - 1) l |> List.head
+
+powerupHero : List Powerup -> Hero -> Hero
+powerupHero powerups hero =
+  if List.any (\p -> (colliding (hero.x, hero.y) (p.x, p.y))) powerups then
+    List.head (List.filter (\p -> (colliding (hero.x, hero.y) (p.x, p.y))) powerups) |> applyPowerup hero
+  else
+    hero
+
+applyPowerup : Hero -> Powerup -> Hero
+applyPowerup hero power =
+  case power.powerupType of
+    GunStandard -> {hero | gunType <- StandardGun}
+    GunBomb -> {hero | gunType <- BombLauncher}
+    GunW -> {hero | gunType <- WShot}
+    GunSpawner -> {hero | gunType <- SpawnerLauncher}
+    GunBeam -> {hero | gunType <- Beam}
+    Health -> {hero | health <- min 10 (hero.health + 5)}
+    Speed -> {hero | speed <- hero.speed + 1}
 
 determineNewGun : GunType -> List Int -> GunType
 determineNewGun currentGun keysDown =
@@ -429,7 +457,24 @@ fireEnemyBullet enemy =
 
 updatePowerups : GameState -> List Powerup
 updatePowerups state =
-  state.powerups
+    let maxX = (toFloat (fst state.dimensions))/2.0 - 17.0
+        minX = -maxX
+        maxY = (toFloat (snd state.dimensions))/2.0 - 17.0
+        minY = -maxY
+        (addValue, seed') = Random.generate (Random.float 0 1) state.seed
+        (xStart, seed'') = Random.generate (Random.float minX maxX) seed'
+        (yStart, seed_ignored) = Random.generate (Random.float minY maxY) seed''
+    in
+      -- [powerup 20.0 20.0 Speed]
+      -- GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health | Speed
+      if | addValue < 0.993 -> state.powerups
+         | addValue < 0.994 -> [powerup xStart yStart GunStandard] ++ state.powerups
+         | addValue < 0.995 -> [powerup xStart yStart GunBomb] ++ state.powerups
+         | addValue < 0.996 -> [powerup xStart yStart GunW] ++ state.powerups
+         | addValue < 0.997 -> [powerup xStart yStart GunSpawner] ++ state.powerups
+         | addValue < 0.998 -> [powerup xStart yStart GunBeam] ++ state.powerups
+         | addValue < 0.999 -> [powerup xStart yStart Health] ++ state.powerups
+         | otherwise -> [powerup xStart yStart Speed] ++ state.powerups
 
 --View functions
 
@@ -498,15 +543,7 @@ drawBoom : Form
 drawBoom =
   let leBoom = drawBulletBomb
       offset = 7.0/sqrt(2)
-  in group [ move (0.0,2.0*offset) leBoom,
-             move (2.0*offset,0.0) leBoom,
-             move (0.0,-2.0*offset) leBoom,
-             move (-2.0*offset,0.0) leBoom,
-             move (2.0*offset,2.0*offset) leBoom,
-             move (-2.0*offset,2.0*offset) leBoom,
-             move (2.0*offset,-2.0*offset) leBoom,
-             move (-2.0*offset,-2.0*offset) leBoom,
-             move (offset,offset) leBoom,
+  in group [ move (offset,offset) leBoom,
              move (-offset,offset) leBoom,
              move (offset,-offset) leBoom,
              move (-offset,-offset) leBoom,
@@ -516,6 +553,43 @@ drawBulletSpawner : Form
 drawBulletSpawner =
   filled green (circle 5)
 
+drawBasePowerup : Form
+drawBasePowerup =
+  filled purple (ngon 5 10)
+
+drawPowerupStandard : Form
+drawPowerupStandard =
+  let standard = filled darkRed (circle 5)
+  in group [drawBasePowerup, standard]
+drawPowerupBomb : Form
+drawPowerupBomb =
+  let big = filled lightRed (circle 5)
+      med = filled yellow (circle 3)
+      small = filled lightRed (circle 1)
+  in group [drawBasePowerup, big, med, small]
+drawPowerupW : Form
+drawPowerupW =
+  let trig = filled lightBlue (ngon 3 5)
+  in group [drawBasePowerup, trig]
+drawPowerupSpawner : Form
+drawPowerupSpawner =
+  let circ = filled black (circle 5)
+      bar = filled white (rect 10 3)
+  in group [drawBasePowerup, circ, bar]
+drawPowerupBeam : Form
+drawPowerupBeam =
+  let box = filled orange (square 7)
+  in group [drawBasePowerup, box]
+drawPowerupHealth : Form
+drawPowerupHealth =
+  let hoz = filled white (rect 7 3)
+      vert = filled white (rect 3 7)
+  in group [drawBasePowerup, hoz, vert]
+drawPowerupSpeed : Form
+drawPowerupSpeed =
+  let vert = filled lightYellow (rect 3 7)
+  in group [drawBasePowerup, vert]
+
 -- Code for Test Drawing a single ship onto the board at x,y coords
 -- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 viewGameState : GameState -> Element
@@ -524,8 +598,9 @@ viewGameState state =
       enemyForms = List.map viewEnemy state.enemies
       bulletForms = List.map viewBullet state.heroBullets
       enemyBulletForms = List.map viewBullet state.enemyBullets
+      powerupForms = List.map viewPowerup state.powerups
       (w, h) = state.dimensions
-      merged = collage w h (bulletForms ++ enemyBulletForms ++ [heroForm] ++ enemyForms)
+      merged = collage w h (bulletForms ++ enemyBulletForms ++ powerupForms ++[heroForm] ++ enemyForms)
   in
     layers [fittedImage w h "/starfield.gif", merged]
 
@@ -551,6 +626,19 @@ viewBullet bullet =
                 Bomb -> if (bullet.tick < 0) then drawBoom else drawBulletBomb
                 SpawnerBullet -> if (bullet.tick % 2 == 0) then drawBulletStandard else drawBulletSpawner
  in form |> move (bullet.x, bullet.y)
+
+viewPowerup : Powerup -> Form
+viewPowerup powerup =
+  let form = case powerup.powerupType of
+                GunStandard -> drawPowerupStandard
+                GunBomb -> drawPowerupBomb
+                GunW -> drawPowerupW
+                GunSpawner -> drawPowerupSpawner
+                GunBeam -> drawPowerupBeam
+                Health -> drawPowerupHealth
+                Speed -> drawPowerupSpeed
+  in
+    form |> move (powerup.x, powerup.y)
 
 viewShip : (Float,Float) -> (Int, Int) -> Form -> Element
 viewShip (x,y) (w,h) ship =
