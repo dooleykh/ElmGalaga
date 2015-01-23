@@ -390,15 +390,31 @@ updateHeroBullets inputs state =
                       else state.heroBullets
       nonSpawnerBullets = List.filter (\b -> not (b.bulletType == SpawnerBullet)) newBullets
       spawnerBullets = List.filter (\b -> b.bulletType == SpawnerBullet) newBullets |> List.map spawnerBulletChildren |> List.concat
-      newTotalBullets = nonSpawnerBullets ++ spawnerBullets
+      newBombBullets = List.filter (\b -> b.bulletType == Bomb && b.tick == 0) newBullets |> List.map spawnBombChildren |> List.concat
+      newTotalBullets = nonSpawnerBullets ++ spawnerBullets ++ newBombBullets
       dimensions = (toFloat (fst state.dimensions), toFloat (snd state.dimensions))
   in
     List.filter expiredBomb <| List.filter (bulletInDimensions dimensions)
                 <| (List.map moveBullet newTotalBullets |> List.map tickUpdate)
 
+spawnBombChildren : Bullet -> List Bullet
+spawnBombChildren bomb =
+  [(bullet bomb.x bomb.y 3.14 StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0-1.0/6.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0+1.0/6.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0+1.0/3.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0-1.0/3.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0+2.0/3.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0-2.0/3.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0+5.0/6.0)) StandardBullet),
+              (bullet bomb.x bomb.y (3.14*(1.0-5.0/6.0)) StandardBullet),
+              (bullet bomb.x bomb.y (-3.14/2.0) StandardBullet),
+              (bullet bomb.x bomb.y (3.14/2.0) StandardBullet),
+              (bullet bomb.x bomb.y 0.0 StandardBullet)]
+
 expiredBomb : Bullet -> Bool
 expiredBomb candidate =
-  (not (candidate.bulletType == Bomb)) || candidate.bulletType == Bomb && candidate.tick > -100
+  (not (candidate.bulletType == Bomb)) || candidate.bulletType == Bomb && candidate.tick > -50
 
 spawnerBulletChildren : Bullet -> List Bullet
 spawnerBulletChildren spawner =
