@@ -86,8 +86,8 @@ type GunType = StandardGun | BombLauncher | WShot | SpawnerLauncher | Beam
 type PowerupType = GunStandard | GunBomb | GunW | GunSpawner | GunBeam | Health | Speed
 type alias Hero = {x:Float, y:Float, fireDelay:Int, gunType:GunType, health: Int, speed: Float}
 type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health: Int, xStart: Float, yStart: Float, angle: Float}
-type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
-type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
+type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int, level:Int}
+type alias Powerup = {x:Float, y:Float, powerupType:PowerupType, tick:Int}
 
 type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup, dimensions: (Int, Int), seed: Random.Seed, gameOver: Bool}
 
@@ -111,7 +111,11 @@ enemy xStart yStart enemyType =
 
 bullet: Float -> Float -> Float -> BulletType -> Bullet
 bullet xStart yStart angle bType =
-  let record = {x=xStart, y=yStart, angle=angle, bulletType=bType, tick=0}
+  bullet2 xStart yStart angle bType 0
+
+bullet2: Float -> Float -> Float -> BulletType -> Int -> Bullet
+bullet2 xStart yStart angle bType levelCount=
+  let record = {x=xStart, y=yStart, angle=angle, bulletType=bType, tick=0, level=levelCount}
   in
     case bType of
       StandardBullet -> record
@@ -120,7 +124,7 @@ bullet xStart yStart angle bType =
 
 powerup : Float -> Float -> PowerupType -> Powerup
 powerup xStart yStart pType =
-  {x=xStart, y=yStart, powerupType=pType}
+  {x=xStart, y=yStart, powerupType=pType, tick=300}
 
 gameState : GameState
 gameState =
@@ -154,7 +158,7 @@ updateGame input state =
         enemies <- updateEnemies input state,
         heroBullets <- updateHeroBullets input state,
         enemyBullets <- updateEnemyBullets state,
-        powerups <- updatePowerups state,
+        powerups <- updatePowerups state |> tickPowerups,
         dimensions <- input.dimensions,
         seed <- nextSeed state.seed
       }
@@ -163,11 +167,19 @@ updateGame input state =
         enemies <- (collideEnemiesWithHero movedState.hero movedState.enemies) |> collideEnemiesWithBullets movedState.heroBullets,
         heroBullets <- heroRemainingBullets movedState.enemies movedState.heroBullets,
         enemyBullets <- enemyRemaingBullets movedState.hero movedState.enemyBullets,
-        powerups <- collideHeroWithPowerups movedState.hero movedState.powerups
+        powerups <- (collideHeroWithPowerups movedState.hero movedState.powerups) |> expirePowerups
       }
       removedState = if (collidedState.hero.health <= 0) then {collidedState | gameOver <- True} else collidedState
   in
     removedState
+
+tickPowerups : List Powerup -> List Powerup
+tickPowerups powerups =
+  List.map (\p -> {p | tick <- p.tick - 1}) powerups
+
+expirePowerups : List Powerup -> List Powerup
+expirePowerups powerups =
+  List.filter (\p -> p.tick > 0) powerups
 
 manhattan : (Float, Float) -> (Float, Float) -> Float
 manhattan (x, y) (x2, y2) =
@@ -392,7 +404,7 @@ spawnerBulletChildren : Bullet -> List Bullet
 spawnerBulletChildren spawner =
   let angleDif = 3.14/6.0
   in
-    if (spawner.tick <= 0) then [(bullet spawner.x spawner.y spawner.angle SpawnerBullet),(bullet spawner.x spawner.y (spawner.angle + angleDif) SpawnerBullet), (bullet spawner.x spawner.y (spawner.angle - angleDif) SpawnerBullet)]
+    if (spawner.tick <= 0 && spawner.level < 5) then [(bullet2 spawner.x spawner.y spawner.angle SpawnerBullet (spawner.level + 1)),(bullet2 spawner.x spawner.y (spawner.angle + angleDif) SpawnerBullet (spawner.level + 1)), (bullet2 spawner.x spawner.y (spawner.angle - angleDif) SpawnerBullet (spawner.level + 1))]
       else [spawner]
 
 bulletInDimensions : (Float, Float) -> Bullet -> Bool
