@@ -159,7 +159,9 @@ updateGame input state =
       }
       collidedState = {movedState |
         hero <- (collideHeroWithEnemies movedState.enemies movedState.hero) |> collideHeroWithBullets movedState.enemyBullets,
-        enemies <- (collideEnemiesWithHero movedState.hero movedState.enemies) |> collideEnemiesWithBullets movedState.heroBullets
+        enemies <- (collideEnemiesWithHero movedState.hero movedState.enemies) |> collideEnemiesWithBullets movedState.heroBullets,
+        heroBullets <- heroRemainingBullets movedState.enemies movedState.heroBullets,
+        enemyBullets <- enemyRemaingBullets movedState.hero movedState.enemyBullets
       }
       removedState = if (collidedState.hero.health <= 0) then {collidedState | gameOver <- True} else collidedState
   in
@@ -203,6 +205,19 @@ collideEnemyWithBullets bullets enemy =
       sumBullets = List.length collidingBullets
   in
     {enemy | health <- enemy.health - sumBullets}
+
+heroRemainingBullets : List Enemy -> List Bullet -> List Bullet
+heroRemainingBullets enemies bullets =
+  -- List.filter (\b -> (List.any (\e -> colliding (b.x, b.y) (e.x, e.y)) enemies)) bullets
+  List.filter (\b -> not (bulletCollide b enemies)) bullets
+
+bulletCollide : Bullet -> List Enemy -> Bool
+bulletCollide bullet enemies =
+  List.any (\e -> colliding (e.x, e.y) (bullet.x, bullet.y)) enemies
+
+enemyRemaingBullets : Hero -> List Bullet -> List Bullet
+enemyRemaingBullets hero enemyBullets =
+  List.filter (\b -> not (colliding (hero.x, hero.y) (b.x, b.y))) enemyBullets
 
 nextSeed : Random.Seed -> Random.Seed
 nextSeed seed =
