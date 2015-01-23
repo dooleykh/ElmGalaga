@@ -126,9 +126,9 @@ gameState : GameState
 gameState =
   let h = hero 0.0 0.0
       e = []
-      p = [powerup 20.0 20.0 Speed]
+      p = [powerup 20.0 60.0 GunStandard,powerup 20.0 40.0 GunBomb,powerup 20.0 20.0 GunW,powerup 20.0 0.0 GunSpawner,powerup 20.0 -20.0 GunBeam,powerup 20.0 -40.0 Health,powerup 20.0 -60.0 Speed]
   in
-    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = p,dimensions=(0,0),seed=Random.initialSeed 165411,gameOver=False}
+    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = p,dimensions=(0,0),seed=Random.initialSeed 1492,gameOver=False}
 
 --Update Functions
 updateGameState = foldp updateGame gameState input
