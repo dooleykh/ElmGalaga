@@ -89,7 +89,7 @@ type alias Enemy = {x:Float, y:Float, enemyType:EnemyType, fireDelay:Int, health
 type alias Bullet = {x:Float, y:Float, angle:Float, bulletType:BulletType, tick:Int}
 type alias Powerup = {x:Float, y:Float, powerupType:PowerupType}
 
-type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup, dimensions: (Int, Int), seed: Random.Seed}
+type alias GameState = {hero:Hero, enemies: List Enemy, heroBullets: List Bullet, enemyBullets: List Bullet, powerups: List Powerup, dimensions: (Int, Int), seed: Random.Seed, gameOver: Bool}
 
 type alias Input = {arrows:Arrows, delta:Time, fire:Bool, keysDown: List Int, dimensions:(Int, Int)}
 type alias Arrows = {x:Float, y:Float}
@@ -103,11 +103,11 @@ enemy: Float -> Float -> EnemyType -> Enemy
 enemy xStart yStart enemyType =
   case enemyType of
     Fighter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=5, health=1, xStart=xStart, yStart=yStart, angle=0}
-    Diver -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=Random.maxInt, health=5, xStart=xStart, yStart=yStart, angle=0}
+    Diver -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=Random.maxInt, health=2, xStart=xStart, yStart=yStart, angle=0}
     Drifter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=3, health=2, xStart=xStart, yStart=yStart, angle=0}
     Hunter -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=10, health=3, xStart=xStart, yStart=yStart, angle=0}
     Spawner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=20, health=10, xStart=xStart, yStart=yStart, angle=0}
-    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=15, health=5, xStart=xStart, yStart=yStart, angle=0}
+    Spinner -> {x=xStart, y=yStart, enemyType=enemyType, fireDelay=15, health=3, xStart=xStart, yStart=yStart, angle=0}
 
 bullet: Float -> Float -> Float -> BulletType -> Bullet
 bullet xStart yStart angle bType =
@@ -127,7 +127,7 @@ gameState =
   let h = hero 0.0 0.0
       e = []
   in
-    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0),seed=Random.initialSeed 1492}
+    {hero = h, enemies = e, heroBullets = [], enemyBullets = [], powerups = [],dimensions=(0,0),seed=Random.initialSeed 165411,gameOver=False}
 
 --Update Functions
 updateGameState = foldp updateGame gameState input
@@ -146,17 +146,63 @@ delta =
 
 updateGame : Input -> GameState -> GameState
 updateGame input state =
+  if (state.gameOver) then state
+  else
   let movedState = {state |
-    hero <- updateHero input state,
-    enemies <- updateEnemies input state,
-    heroBullets <- updateHeroBullets input state,
-    enemyBullets <- updateEnemyBullets state,
-    powerups <- updatePowerups state,
-    dimensions <- input.dimensions,
-    seed <- nextSeed state.seed
-  }
+        hero <- updateHero input state,
+        enemies <- updateEnemies input state,
+        heroBullets <- updateHeroBullets input state,
+        enemyBullets <- updateEnemyBullets state,
+        powerups <- updatePowerups state,
+        dimensions <- input.dimensions,
+        seed <- nextSeed state.seed
+      }
+      collidedState = {movedState |
+        hero <- (collideHeroWithEnemies movedState.enemies movedState.hero) |> collideHeroWithBullets movedState.enemyBullets,
+        enemies <- (collideEnemiesWithHero movedState.hero movedState.enemies) |> collideEnemiesWithBullets movedState.heroBullets
+      }
+      removedState = if (collidedState.hero.health <= 0) then {collidedState | gameOver <- True} else collidedState
   in
-    movedState
+    removedState
+
+manhattan : (Float, Float) -> (Float, Float) -> Float
+manhattan (x, y) (x2, y2) =
+  let xDist = if (x > x2) then x-x2 else x2-x
+      yDist = if (y > y2) then y-y2 else y2-y
+  in xDist+yDist
+
+colliding : (Float,Float) -> (Float,Float) -> Bool
+colliding (x1,y1) (x2,y2) =
+  (manhattan (x1,y1) (x2,y2)) < 10 --TODO parameter
+
+collideHeroWithEnemies : List Enemy -> Hero -> Hero
+collideHeroWithEnemies enemies hero =
+  let collidingEnemies = List.filter (\e -> colliding (e.x, e.y) (hero.x, hero.y)) enemies
+      sumEnemyHealth = List.foldr (+) 0 (List.map (\e -> e.health) collidingEnemies)
+  in
+    {hero | health <- hero.health - sumEnemyHealth}
+
+collideHeroWithBullets : List Bullet -> Hero -> Hero
+collideHeroWithBullets bullets hero =
+  let collidingBullets = List.filter (\b -> colliding (b.x, b.y) (hero.x, hero.y)) bullets
+      sumBullets = List.length collidingBullets
+  in
+    {hero | health <- hero.health - sumBullets}
+
+collideEnemiesWithHero : Hero -> List Enemy -> List Enemy
+collideEnemiesWithHero hero enemies =
+  List.filter (\e -> not (colliding (e.x, e.y) (hero.x, hero.y))) enemies
+
+collideEnemiesWithBullets : List Bullet -> List Enemy -> List Enemy
+collideEnemiesWithBullets bullets enemies =
+  List.filter (\e -> e.health > 0) (List.map (collideEnemyWithBullets bullets) enemies)
+
+collideEnemyWithBullets : List Bullet -> Enemy -> Enemy
+collideEnemyWithBullets bullets enemy =
+  let collidingBullets = List.filter (\b -> colliding (b.x, b.y) (enemy.x, enemy.y)) bullets
+      sumBullets = List.length collidingBullets
+  in
+    {enemy | health <- enemy.health - sumBullets}
 
 nextSeed : Random.Seed -> Random.Seed
 nextSeed seed =
@@ -229,7 +275,7 @@ spawnEnemies : Random.Seed -> (Int, Int) -> List Enemy
 spawnEnemies seed (windowX, windowY) =
   let maxX = (toFloat windowX)/2.0
       minX = maxX - 20.0
-      maxY = (toFloat windowY)/2.0
+      maxY = (toFloat windowY)/2.0 - 17.0
       minY = -maxY
       (addValue, seed') = Random.generate (Random.float 0 1) seed
       (xStart, seed'') = Random.generate (Random.float minX maxX) seed'
@@ -240,7 +286,7 @@ spawnEnemies seed (windowX, windowY) =
        | addValue < 0.995 -> [(enemy xStart yStart Diver)]
        | addValue < 0.997 -> [(enemy xStart yStart Drifter)]
        | addValue < 0.998 -> [(enemy xStart yStart Hunter)]
-       | addValue < 0.999 -> [(enemy xStart yStart Spinner)]
+       | addValue < 0.999 -> [(enemy xStart (yStart/2.0) Spinner)]
        | otherwise -> [(enemy xStart yStart Spawner)]
 
 newEnemyFireDelay : EnemyType -> Int
@@ -464,7 +510,7 @@ viewGameState state =
       bulletForms = List.map viewBullet state.heroBullets
       enemyBulletForms = List.map viewBullet state.enemyBullets
       (w, h) = state.dimensions
-      merged = collage w h ([heroForm] ++ enemyForms ++ bulletForms ++ enemyBulletForms)
+      merged = collage w h (bulletForms ++ enemyBulletForms ++ [heroForm] ++ enemyForms)
   in
     layers [fittedImage w h "/starfield.gif", merged]
 
