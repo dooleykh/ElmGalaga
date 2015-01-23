@@ -253,14 +253,16 @@ updateHero : Input -> GameState -> Hero
 updateHero inputs state =
   let localHero = state.hero
       newWeapon = determineNewGun localHero.gunType inputs.keysDown
+      newHealth = if List.any (\key -> key == 54) inputs.keysDown then localHero.health + 5 else localHero.health
+      newSpeed = if List.any (\key -> key == 55) inputs.keysDown then localHero.speed + 1 else localHero.speed
       newDelayCount = newDelay (newBulletDelay localHero.gunType) localHero.fireDelay inputs.fire
       newX = localHero.x + inputs.arrows.x*localHero.speed
       newY = localHero.y + inputs.arrows.y*localHero.speed
   in
   if (heroInDemensions (newX, newY) state.dimensions) then
-    {localHero | x <- newX, y <- newY, fireDelay <- newDelayCount, gunType <- newWeapon}
+    {localHero | x <- newX, y <- newY, fireDelay <- newDelayCount, gunType <- newWeapon, health <- newHealth, speed <- newSpeed}
   else
-    {localHero | fireDelay <- newDelayCount, gunType <- newWeapon}
+    {localHero | fireDelay <- newDelayCount, gunType <- newWeapon, health <- newHealth, speed <- newSpeed}
 
 getLastElement : List a -> a
 getLastElement l =
@@ -594,15 +596,22 @@ drawPowerupSpeed =
 -- Starfield gif can be obtained at http://30000fps.com/post/93334443098
 viewGameState : GameState -> Element
 viewGameState state =
-  let heroForm = viewHero state.hero
-      enemyForms = List.map viewEnemy state.enemies
-      bulletForms = List.map viewBullet state.heroBullets
-      enemyBulletForms = List.map viewBullet state.enemyBullets
-      powerupForms = List.map viewPowerup state.powerups
-      (w, h) = state.dimensions
-      merged = collage w h (bulletForms ++ enemyBulletForms ++ powerupForms ++[heroForm] ++ enemyForms)
-  in
-    layers [fittedImage w h "/starfield.gif", merged]
+  if state.gameOver == True then layers[fittedImage (fst state.dimensions) (snd state.dimensions) "/starfield.gif"]
+  else
+    let (w, h) = state.dimensions
+        healthForm = viewHealth (toFloat h) (toFloat state.hero.health)
+        heroForm = viewHero state.hero
+        enemyForms = List.map viewEnemy state.enemies
+        bulletForms = List.map viewBullet state.heroBullets
+        enemyBulletForms = List.map viewBullet state.enemyBullets
+        powerupForms = List.map viewPowerup state.powerups
+        merged = collage w h (bulletForms ++ enemyBulletForms ++ powerupForms ++[heroForm] ++ enemyForms ++ [healthForm])
+    in
+      layers [fittedImage w h "/starfield.gif", merged]
+
+viewHealth : Float -> Float -> Form
+viewHealth h health =
+  move (0.0, h/2 - 10.0) <| (if health >= 6 then alpha 0.4 (filled green (rect (50.0 * health) 20.0)) else alpha 0.4 (filled red (rect (50.0 * health) 20.0)))
 
 viewHero : Hero -> Form
 viewHero hero =
